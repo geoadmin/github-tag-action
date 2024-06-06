@@ -105,6 +105,11 @@ then
     fi
 else
     log=$(git log "${tag}"..HEAD --pretty='%B')
+
+    if ${pre_release}
+    then
+        log=$(git log "${pre_tag}"..HEAD --pretty='%B')
+    fi
 fi
 
 # get current commit hash for tag
