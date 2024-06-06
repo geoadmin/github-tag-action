@@ -14,6 +14,12 @@ tag_context=${TAG_CONTEXT:-repo}
 suffix=${PRERELEASE_SUFFIX:-beta}
 verbose=${VERBOSE:-true}
 
+if [[ -z "${suffix}" ]]
+then
+    echo "::error::PRERELEASE_SUFFIX is set to an empty string"
+    exit 1
+fi
+
 # since https://github.blog/2022-04-12-git-security-vulnerability-announced/ runner uses?
 if [[ "${source}" =~ ^\.$ ]]
 then
@@ -84,6 +90,9 @@ case "${tag_context}" in
         ;;
 esac
 
+echo "Last tag: ${tag}"
+echo "Last pre-release tag: ${pre_tag}"
+
 
 # if there are none, start tags at INITIAL_VERSION which defaults to 0.0.0
 if [[ -z "${tag}" ]]
@@ -114,44 +123,58 @@ fi
 # echo log if verbose is wanted
 if ${verbose}
 then
-  echo "${log}"
+    echo "Git logs"
+    echo "---------------------------"
+    echo "${log}"
+    echo "---------------------------"
 fi
 
 case "${log}" in
-    *#major* ) new=$(semver -i major "${tag}"); part="major";;
-    *#minor* ) new=$(semver -i minor "${tag}"); part="minor";;
-    *#patch* ) new=$(semver -i patch "${tag}"); part="patch";;
-    *#none* )
-        echo "Default bump was set to none. Skipping..."
-        echo "new_tag=${tag}" >> "${GITHUB_OUTPUT}"
-        echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
-        exit 0
-        ;;
+    *#major* ) part="major";;
+    *#minor* ) part="minor";;
+    *#patch* ) part="patch";;
+    *#none* )  part="none" ;;
     * )
         if [[ "${default_semvar_bump}" == "none" ]]
         then
-            echo "Default bump was set to none. Skipping..."
-            echo "new_tag=${tag}" >> "${GITHUB_OUTPUT}"
-            echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
-            exit 0
+            part="none"
         else
-            new=$(semver -i "${default_semvar_bump}" "${tag}"); part=${default_semvar_bump}
+            part="${default_semvar_bump}"
         fi
         ;;
 esac
+echo "Bumping type set to ${part}"
+echo "part=${part}" >> "${GITHUB_OUTPUT}"
+
+if [[ "${part}" == "none" ]]
+then
+    echo "Default bump was set to none. Skipping..."
+    # shellcheck disable=SC2129
+    echo "new_tag=${tag}" >> "${GITHUB_OUTPUT}"
+    echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+    exit 0
+fi
 
 if ${pre_release}
 then
-    # Already a prerelease available, bump it
-    if [[ "${pre_tag}" == *"${new}"* ]]
+    if [[ "${tag}" == "${pre_tag}" ]]
     then
-        new=$(semver -i prerelease "${pre_tag}" --preid "${suffix}"); part="pre-${part}"
+        echo "First pre-release tag detected, create initial pre-release tag using bump type ${part}"
+        new=$(semver -i "pre${part}" "${pre_tag}" --preid "${suffix}")
     else
-        new="${new}-${suffix}.1"; part="pre-${part}"
+        echo "Pre-release tag already exists, increment it based on bump type ${part}"
+        new=$(semver -i "prerelease" "${pre_tag}" --preid "${suffix}")
+        next_release=$(semver -i "${part}" "${pre_tag}")
+        if [[ "${new}" != ${next_release}* ]]
+        then
+            # the next release is different higher as the next pre-release, therefore bump a new pre
+            # release part (e.g. from 1.1.1-beta.2 to 1.2.0-beta.0)
+            new=$(semver -i "pre${part}" "${pre_tag}" --preid "${suffix}")
+        fi
     fi
+else
+    new=$(semver -i "${part}" "${tag}");
 fi
-
-echo "${part}"
 
 # prefix with 'v'
 if ${with_v}
@@ -174,7 +197,6 @@ fi
 
 # set outputs
 echo "new_tag=${new}" >> "${GITHUB_OUTPUT}"
-echo "part=${part}" >> "${GITHUB_OUTPUT}"
 
 # use dry run to determine the next tag
 if ${dryrun}
