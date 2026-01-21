@@ -9,10 +9,16 @@ release_branches=${RELEASE_BRANCHES:-master,main}
 custom_tag=${CUSTOM_TAG:-}
 source=${SOURCE:-.}
 dryrun=${DRY_RUN:-false}
-initial_version=${INITIAL_VERSION:-0.0.0}
 tag_context=${TAG_CONTEXT:-repo}
 suffix=${PRERELEASE_SUFFIX:-beta}
 verbose=${VERBOSE:-true}
+
+prefix=""
+if ${with_v}
+then
+    prefix="v"
+fi
+initial_version=${INITIAL_VERSION:-${prefix}0.0.0}
 
 if [[ -z "${suffix}" ]]
 then
@@ -43,12 +49,6 @@ echo -e "\tPRERELEASE_SUFFIX: ${suffix}"
 echo -e "\tVERBOSE: ${verbose}"
 echo -e "\tGITHUB_WORKSPACE: ${GITHUB_WORKSPACE}"
 
-prefix=""
-if ${with_v}
-then
-    prefix="v"
-fi
-
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
 pre_release="true"
@@ -72,20 +72,36 @@ preTagFmt="^${prefix}[0-9]+\.[0-9]+\.[0-9]+(-${suffix}\.[0-9]+)?$"
 case "${tag_context}" in
     *repo*)
         mapfile -t taglist < <(git for-each-ref --sort=-v:refname --format '%(refname:lstrip=2)' | grep -E "${tagFmt}")
-        tag="${prefix}$(semver "${taglist[@]}" | tail -n 1)"
+        if [[ -n "${taglist[*]}" ]]; then
+            tag="${prefix}$(semver "${taglist[@]}" | tail -n 1)"
+        else
+            tag=""
+        fi
 
         mapfile -t pre_taglist < <(git for-each-ref --sort=-v:refname --format '%(refname:lstrip=2)' | grep -E "${preTagFmt}")
-        pre_tag="${prefix}$(semver "${pre_taglist[@]}" | tail -n 1)"
+        if [[ -n "${pre_taglist[*]}" ]]; then
+            pre_tag="${prefix}$(semver "${pre_taglist[@]}" | tail -n 1)"
+        else
+            pre_tag=""
+        fi
         ;;
     *branch*)
         mapfile -t taglist < <(git tag --list --merged HEAD --sort=-v:refname | grep -E "${tagFmt}")
-        tag="${prefix}$(semver "${taglist[@]}" | tail -n 1)"
+        if [[ -n "${taglist[*]}" ]]; then
+            tag="${prefix}$(semver "${taglist[@]}" | tail -n 1)"
+        else
+            tag=""
+        fi
 
-        mapfile -t taglist < <(git tag --list --merged HEAD --sort=-v:refname | grep -E "${preTagFmt}")
-        pre_tag="${prefix}$(semver "${pre_taglist[@]}" | tail -n 1)"
+        mapfile -t pre_taglist < <(git tag --list --merged HEAD --sort=-v:refname | grep -E "${preTagFmt}")
+        if [[ -n "${taglist[*]}" ]]; then
+            pre_tag="${prefix}$(semver "${pre_taglist[@]}" | tail -n 1)"
+        else
+            pre_tag=""
+        fi
         ;;
     * )
-        echo "Unrecognised context";
+        echo "Unrecognized context";
         exit 1
         ;;
 esac
@@ -103,6 +119,9 @@ then
     then
       pre_tag="${initial_version}"
     fi
+
+    # We have no tag commit yet
+    tag_commit=""
 else
     log=$(git log "${tag}"..HEAD --pretty='%B')
 
@@ -110,10 +129,10 @@ else
     then
         log=$(git log "${pre_tag}"..HEAD --pretty='%B')
     fi
-fi
 
-# get current commit hash for tag
-tag_commit=$(git rev-list -n 1 "${tag}")
+    # get current commit hash for tag
+    tag_commit=$(git rev-list -n 1 "${tag}")
+fi
 
 # get current commit hash
 commit=$(git rev-parse HEAD)
