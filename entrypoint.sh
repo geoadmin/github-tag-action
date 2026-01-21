@@ -9,10 +9,16 @@ release_branches=${RELEASE_BRANCHES:-master,main}
 custom_tag=${CUSTOM_TAG:-}
 source=${SOURCE:-.}
 dryrun=${DRY_RUN:-false}
-initial_version=${INITIAL_VERSION:-0.0.0}
 tag_context=${TAG_CONTEXT:-repo}
 suffix=${PRERELEASE_SUFFIX:-beta}
 verbose=${VERBOSE:-true}
+
+prefix=""
+if ${with_v}
+then
+    prefix="v"
+fi
+initial_version=${INITIAL_VERSION:-${prefix}0.0.0}
 
 if [[ -z "${suffix}" ]]
 then
@@ -42,12 +48,6 @@ echo -e "\tTAG_CONTEXT: ${tag_context}"
 echo -e "\tPRERELEASE_SUFFIX: ${suffix}"
 echo -e "\tVERBOSE: ${verbose}"
 echo -e "\tGITHUB_WORKSPACE: ${GITHUB_WORKSPACE}"
-
-prefix=""
-if ${with_v}
-then
-    prefix="v"
-fi
 
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
